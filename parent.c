@@ -103,8 +103,11 @@ int main() {
     pid1 = fork();
     if (pid1 == 0) {
         // Code for the first child
-        execl("./child", "child", NULL);
-        perror("Error executing child process 1");
+
+        char *arg_prt_1[] = {"ls", "-l", "-R", "-a", NULL};
+        execv("./child.bin", arg_prt_1);
+        perror("Error al ejecutar el proceso hijo 1");
+
         exit(1);
     } else if (pid1 < 0) {
         perror("Error creating child process 1");
@@ -114,9 +117,11 @@ int main() {
 
     pid2 = fork();
     if (pid2 == 0) {
-        // Code for the second child
-        execl("./child", "child", NULL);
-        perror("Error executing child process 2");
+
+        char *arg_prt_2[] = {"ls", "-l", "-R", "-a", NULL};
+        execv("./child.bin", arg_prt_2);
+        perror("Error al ejecutar el proceso hijo 2");
+
         exit(1);
     } else if (pid2 < 0) {
         perror("Error creating child process 2");
@@ -134,6 +139,8 @@ int main() {
     system(command);
 
     printf("\n >> Saliendo del SystemTap \n");
+
+    analyze_syscalls_file();
 
     // Print the counts
     print_syscall_summary();
