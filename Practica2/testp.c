@@ -7,6 +7,7 @@
 #include "cJSON.h"
 #include "cJSON.c"
 
+
 // Estructura para almacenar la información de un usuario
 typedef struct {
     int no_cuenta;
@@ -108,6 +109,20 @@ void *cargar_usuarios(void *arg) {
     pthread_exit(NULL);
 }
 
+
+void operaciones_inviduales(){
+    printf("Operaciones individuales\n");
+}
+
+void carga_masiva_operaciones(){
+    printf("Carga masiva de operaciones\n");
+}
+
+void estado_cuenta(){
+    printf("Estado de cuenta\n");
+}
+
+
 int main() {
     const char *filename = "usuarios.json";
     char *json_string = read_file(filename);
@@ -192,5 +207,34 @@ int main() {
     }
 
     pthread_mutex_destroy(&lock);
+
+    //call menu function
+    int option;
+    do{
+        printf("\n\n");
+        printf("1. Operaciones individuales\n");
+        printf("2. Carga masiva de operaciones\n");
+        printf("3. Estado de cuenta\n");
+        printf("4. Salir\n");
+        printf("Seleccione una opción: ");
+        scanf("%d", &option);
+        switch(option){
+            case 1:
+                operaciones_inviduales();
+                break;
+            case 2:
+                carga_masiva_operaciones();
+                break;
+            case 3:
+                estado_cuenta();
+                break;
+            case 4:
+                break;
+            default:
+                printf("Opción no válida\n");
+        }
+    }while(option != 4);
+
+
     return 0;
 }
