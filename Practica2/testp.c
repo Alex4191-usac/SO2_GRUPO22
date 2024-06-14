@@ -160,6 +160,39 @@ void deposito() {
     printf("Depósito realizado con éxito.\n");
 }
 
+//Funcion para realizar un Retiro
+void retiro() {
+    int no_cuenta;
+    double monto;
+    printf("Ingrese el número de cuenta: ");
+    scanf("%d", &no_cuenta);
+
+    Usuario *usuario = buscar_usuario(no_cuenta);
+    if (usuario == NULL) {
+        printf("Error: El número de cuenta no existe.\n");
+        return;
+    }
+
+    printf("/n");
+    printf("Ingrese el monto a retirar: ");
+    scanf("%lf", &monto);
+    //validar monto
+    if (monto <= 0) {
+        printf("Error: El monto debe ser un número positivo.\n");
+        return;
+    }
+
+    if (usuario->saldo < monto) {
+        printf("Error: Saldo insuficiente.\n");
+        return;
+    }
+
+    pthread_mutex_lock(&lock);
+    usuario->saldo -= monto;
+    pthread_mutex_unlock(&lock);
+    printf("Retiro realizado con éxito.\n");
+}
+
 
 // Función para consultar una cuenta
 void consultar_cuenta() {
@@ -196,7 +229,7 @@ void operaciones_individuales() {
                 deposito();
                 break;
             case 2:
-                // retiro();
+                retiro();
                 break;
             case 3:
                 // transaccion();
