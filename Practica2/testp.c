@@ -212,6 +212,57 @@ void consultar_cuenta() {
     printf("Saldo: %.2f\n", usuario->saldo);
 }
 
+
+//Funcion para realizar una transaccion
+void transaccion(){
+    int no_cuenta;
+    printf("Ingrese el número de cuenta: ");
+    scanf("%d", &no_cuenta);
+
+    //Buscar cuenta
+    Usuario *usuario = buscar_usuario(no_cuenta);
+    if (usuario == NULL) {
+        printf("Error: El número de cuenta no existe.\n");
+        return;
+    }
+
+    //Cuenta destino
+    int no_cuenta_destino;
+    printf("Ingrese el número de cuenta destino: ");
+    scanf("%d", &no_cuenta_destino);
+
+    //Buscar cuenta destino
+    Usuario *usuario_destino = buscar_usuario(no_cuenta_destino);
+    if (usuario_destino == NULL) {
+        printf("Error: El número de cuenta destino no existe.\n");
+        return;
+    }
+
+    //Monto a transferir
+    double monto;
+    printf("Ingrese el monto a transferir: ");
+    scanf("%lf", &monto);
+    //validar monto
+    if (monto <= 0) {
+        printf("Error: El monto debe ser un número positivo.\n");
+        return;
+    }
+
+    //Validar saldo
+    if (usuario->saldo < monto) {
+        printf("Error: Saldo insuficiente.\n");
+        return;
+    }
+
+    //Realizar transaccion
+    pthread_mutex_lock(&lock);
+    usuario->saldo -= monto;
+    usuario_destino->saldo += monto;
+    pthread_mutex_unlock(&lock);
+    printf("Transacción realizada con éxito.\n");
+
+}
+
 void operaciones_individuales() {
     int opcion;
     while (1) {
@@ -232,7 +283,7 @@ void operaciones_individuales() {
                 retiro();
                 break;
             case 3:
-                // transaccion();
+                transaccion();
                 break;
             case 4:
                 consultar_cuenta();
