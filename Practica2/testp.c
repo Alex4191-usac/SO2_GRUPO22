@@ -7,7 +7,6 @@
 #include "cJSON.h"
 #include "cJSON.c"
 
-
 // Estructura para almacenar la información de un usuario
 typedef struct {
     int no_cuenta;
@@ -29,6 +28,10 @@ typedef struct {
 } ThreadData;
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t usuarios_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+int num_usuarios = 0;
+Usuario *usuarios = NULL;
 
 // Función para leer el contenido de un archivo
 char *read_file(const char *filename) {
@@ -60,6 +63,14 @@ cJSON *parse_json(const char *json_string) {
         return NULL;
     }
     return json;
+}
+
+// Función para agregar un usuario a la estructura compartida
+void agregar_usuario(Usuario usuario) {
+    pthread_mutex_lock(&usuarios_mutex);
+    usuarios = (Usuario *)realloc(usuarios, (num_usuarios + 1) * sizeof(Usuario));
+    usuarios[num_usuarios++] = usuario;
+    pthread_mutex_unlock(&usuarios_mutex);
 }
 
 // Función que ejecutarán los hilos
@@ -98,7 +109,8 @@ void *cargar_usuarios(void *arg) {
             continue;
         }
 
-        // Simulación de la inserción en la base de datos
+        // Agregar usuario válido a la estructura compartida
+        agregar_usuario(usuario);
         users_loaded++;
     }
 
@@ -109,19 +121,78 @@ void *cargar_usuarios(void *arg) {
     pthread_exit(NULL);
 }
 
-
-void operaciones_inviduales(){
-    printf("Operaciones individuales\n");
+// Función para buscar un usuario por número de cuenta
+Usuario* buscar_usuario(int no_cuenta) {
+    for (int i = 0; i < num_usuarios; ++i) {
+        if (usuarios[i].no_cuenta == no_cuenta) {
+            return &usuarios[i];
+        }
+    }
+    return NULL;
 }
 
-void carga_masiva_operaciones(){
+// Función para consultar una cuenta
+void consultar_cuenta() {
+    int no_cuenta;
+    printf("Ingrese el número de cuenta: ");
+    scanf("%d", &no_cuenta);
+
+    Usuario *usuario = buscar_usuario(no_cuenta);
+    if (usuario == NULL) {
+        printf("Error: El número de cuenta no existe.\n");
+        return;
+    }
+
+    printf("Información de la cuenta:\n");
+    printf("Número de cuenta: %d\n", usuario->no_cuenta);
+    printf("Nombre: %s\n", usuario->nombre);
+    printf("Saldo: %.2f\n", usuario->saldo);
+}
+
+void operaciones_individuales() {
+    int opcion;
+    while (1) {
+        printf("\nOperaciones Individuales:\n");
+        printf("1. Depósito\n");
+        printf("2. Retiro\n");
+        printf("3. Transacción\n");
+        printf("4. Consultar cuenta\n");
+        printf("5. Volver al menú principal\n");
+        printf("Ingrese el número de opción deseada: ");
+        scanf("%d", &opcion);
+
+        switch (opcion) {
+            case 1:
+                // deposito();
+                break;
+            case 2:
+                // retiro();
+                break;
+            case 3:
+                // transaccion();
+                break;
+            case 4:
+                consultar_cuenta();
+                break;
+            case 5:
+                return;
+            default:
+                printf("Opción no válida. Inténtelo de nuevo.\n");
+                break;
+        }
+    }
+}
+
+void carga_masiva_operaciones() {
     printf("Carga masiva de operaciones\n");
 }
 
-void estado_cuenta(){
-    printf("Estado de cuenta\n");
+void estado_cuenta() {
+    printf("Estado de Cuentas:\n");
+    for (int i = 0; i < num_usuarios; ++i) {
+        printf("Número de cuenta: %d, Nombre: %s, Saldo: %.2f\n", usuarios[i].no_cuenta, usuarios[i].nombre, usuarios[i].saldo);
+    }
 }
-
 
 int main() {
     const char *filename = "usuarios.json";
@@ -130,15 +201,15 @@ int main() {
     if (json_string) {
         cJSON *json = parse_json(json_string);
         if (json) {
-            int num_usuarios = cJSON_GetArraySize(json);
-            Usuario *usuarios = (Usuario *)malloc(num_usuarios * sizeof(Usuario));
+            int total_usuarios = cJSON_GetArraySize(json);
+            Usuario *usuarios_temporales = (Usuario *)malloc(total_usuarios * sizeof(Usuario));
 
             // Extraer los usuarios del JSON
-            for (int i = 0; i < num_usuarios; ++i) {
+            for (int i = 0; i < total_usuarios; ++i) {
                 cJSON *item = cJSON_GetArrayItem(json, i);
-                usuarios[i].no_cuenta = cJSON_GetObjectItem(item, "no_cuenta")->valueint;
-                strcpy(usuarios[i].nombre, cJSON_GetObjectItem(item, "nombre")->valuestring);
-                usuarios[i].saldo = cJSON_GetObjectItem(item, "saldo")->valuedouble;
+                usuarios_temporales[i].no_cuenta = cJSON_GetObjectItem(item, "no_cuenta")->valueint;
+                strcpy(usuarios_temporales[i].nombre, cJSON_GetObjectItem(item, "nombre")->valuestring);
+                usuarios_temporales[i].saldo = cJSON_GetObjectItem(item, "saldo")->valuedouble;
             }
 
             // Crear hilos
@@ -166,12 +237,12 @@ int main() {
             char *errores = (char *)malloc(1000 * sizeof(char)); // Tamaño inicial arbitrario
             errores[0] = '\0'; // Inicializar cadena vacía
 
-            int chunk_size = num_usuarios / 3;
+            int chunk_size = total_usuarios / 3;
 
             for (int i = 0; i < 3; ++i) {
-                thread_data[i].usuarios = usuarios;
+                thread_data[i].usuarios = usuarios_temporales;
                 thread_data[i].start = i * chunk_size;
-                thread_data[i].end = (i == 2) ? num_usuarios : (i + 1) * chunk_size;
+                thread_data[i].end = (i == 2) ? total_usuarios : (i + 1) * chunk_size;
                 thread_data[i].thread_id = i;
                 thread_data[i].num_users_loaded = &num_users_loaded[i];
                 thread_data[i].report_file = report_file;
@@ -198,7 +269,7 @@ int main() {
             fprintf(report_file, "\nErrores encontrados:\n%s\n", errores);
 
             fclose(report_file);
-            free(usuarios);
+            free(usuarios_temporales);
             free(cuentas_existentes);
             free(errores);
             cJSON_Delete(json);
@@ -207,10 +278,11 @@ int main() {
     }
 
     pthread_mutex_destroy(&lock);
+    pthread_mutex_destroy(&usuarios_mutex);
 
-    //call menu function
+    // Call menu function
     int option;
-    do{
+    do {
         printf("\n\n");
         printf("1. Operaciones individuales\n");
         printf("2. Carga masiva de operaciones\n");
@@ -218,9 +290,9 @@ int main() {
         printf("4. Salir\n");
         printf("Seleccione una opción: ");
         scanf("%d", &option);
-        switch(option){
+        switch (option) {
             case 1:
-                operaciones_inviduales();
+                operaciones_individuales();
                 break;
             case 2:
                 carga_masiva_operaciones();
@@ -233,8 +305,8 @@ int main() {
             default:
                 printf("Opción no válida\n");
         }
-    }while(option != 4);
+    } while (option != 4);
 
-
+    free(usuarios);
     return 0;
 }
