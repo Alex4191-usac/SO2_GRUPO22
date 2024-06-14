@@ -302,10 +302,35 @@ void carga_masiva_operaciones() {
 }
 
 void estado_cuenta() {
-    printf("Estado de Cuentas:\n");
+    /*printf("Estado de Cuentas:\n");
     for (int i = 0; i < num_usuarios; ++i) {
         printf("Número de cuenta: %d, Nombre: %s, Saldo: %.2f\n", usuarios[i].no_cuenta, usuarios[i].nombre, usuarios[i].saldo);
+    }*/
+
+    cJSON *json = cJSON_CreateArray();
+    for (int i = 0; i < num_usuarios; ++i) {
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddNumberToObject(item, "no_cuenta", usuarios[i].no_cuenta);
+        cJSON_AddStringToObject(item, "nombre", usuarios[i].nombre);
+        cJSON_AddNumberToObject(item, "saldo", usuarios[i].saldo);
+        cJSON_AddItemToArray(json, item);
     }
+
+    char *json_string = cJSON_Print(json);
+    cJSON_Delete(json);
+
+    FILE *file = fopen("estado_cuenta.json", "w");
+    if (!file) {
+        perror("Could not open file");
+        return;
+    }
+
+    fprintf(file, "%s", json_string);
+    fclose(file);
+    free(json_string);
+
+    printf("Estado de cuenta guardado en estado_cuenta.json\n");
+
 }
 
 int main() {
