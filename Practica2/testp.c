@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <time.h>
 #include <stdbool.h>
+#include <semaphore.h>
 #include "cJSON.h"
 #include "cJSON.c"
 
@@ -13,6 +14,27 @@ typedef struct {
     char nombre[100];
     double saldo;
 } Usuario;
+
+// Estructura para almacenar la informacion de las operaciones
+typedef struct {
+    int operacion;
+    int cuenta1;
+    int cuenta2;
+    double monto;
+} Operacion;
+
+typedef struct {
+    Operacion* operaciones;
+    int start;
+    int end;
+    int thread_id;
+    int *cant_retiros;
+    int *cant_depositos;
+    int *cant_transferencias;
+    char *errores;
+    FILE *report_file;
+    pthread_mutex_t *error_mutex; // Mutex para controlar acceso a errores
+} OperacionThreadData;
 
 // Estructura para pasar datos a los hilos
 typedef struct {
@@ -29,6 +51,8 @@ typedef struct {
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t usuarios_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+sem_t semaforo;
 
 int num_usuarios = 0;
 Usuario *usuarios = NULL;
@@ -193,7 +217,6 @@ void retiro() {
     printf("Retiro realizado con éxito.\n");
 }
 
-
 // Función para consultar una cuenta
 void consultar_cuenta() {
     int no_cuenta;
@@ -211,7 +234,6 @@ void consultar_cuenta() {
     printf("Nombre: %s\n", usuario->nombre);
     printf("Saldo: %.2f\n", usuario->saldo);
 }
-
 
 //Funcion para realizar una transaccion
 void transaccion(){
@@ -297,8 +319,312 @@ void operaciones_individuales() {
     }
 }
 
-void carga_masiva_operaciones() {
+//Funcion para realizar un Deposito
+int masivo_deposito(int no_cuenta, double monto) {
+
+
+    Usuario *usuario = buscar_usuario(no_cuenta);
+    if (usuario == NULL) {
+        return -1;
+    }
+
+    //validar monto
+    if (monto <= 0) {
+        return -2;
+    }
+
+    sem_wait(&semaforo);
+    usuario->saldo += monto;
+    sem_post(&semaforo);
+
+    return 0;
+}
+
+//Funcion para realizar un Retiro
+int  masivo_retiro(int no_cuenta, double monto) {
+
+
+    Usuario *usuario = buscar_usuario(no_cuenta);
+    if (usuario == NULL) {
+        return -1;
+    }
+
+    //validar monto
+    if (monto <= 0) {
+        return -2;
+    }
+
+    if (usuario->saldo < monto) {
+        return -3;
+    }
+
+    sem_wait(&semaforo);
+    usuario->saldo -= monto;
+    sem_post(&semaforo);
+
+    return 0;
+}
+
+//Funcion para realizar una transaccion
+int masivo_transaccion(int cuenta1, int cuenta2, double monto){
+
+
+    //Buscar cuenta
+    Usuario *usuario = buscar_usuario(cuenta1);
+    if (usuario == NULL) {
+        //printf("Error: El número de cuenta no existe.\n");
+        return -1;
+    }
+
+    //Buscar cuenta destino
+    Usuario *usuario_destino = buscar_usuario(cuenta2);
+    if (usuario_destino == NULL) {
+        return -2;
+    }
+
+    //validar monto
+    if (monto <= 0) {
+        return -3;
+    }
+
+    //Validar saldo
+    if (usuario->saldo < monto) {
+        return -4;
+    }
+
+    //Realizar transaccion
+    sem_wait(&semaforo);
+    usuario->saldo -= monto;
+    usuario_destino->saldo += monto;
+    sem_post(&semaforo);
+    return 0;
+}
+
+void *ejecutar_operaciones(void *arg)
+{
+    OperacionThreadData *datos = (OperacionThreadData *)arg;
+    int cant_depositos = 0;
+    int cant_retiros = 0;
+    int cant_transferencias = 0;
+    char thread_error[200];
+
+    for (int i = datos->start; i < datos->end; i++)
+    {
+        Operacion op = datos->operaciones[i];
+        bool error = false;
+        switch (op.operacion)
+        {
+        case 1:
+            // Deposito
+            int result = masivo_deposito(op.cuenta1, op.monto);
+            if (result == -1)
+            {
+                sprintf(thread_error, "Error en hilo %d: El número de cuenta no existe.(línea %d)\n", datos->thread_id, i + 1);
+                error = true;
+            }
+            else if (result == -2)
+            {
+                sprintf(thread_error, "Error en hilo %d: El monto debe ser un número positivo.(línea %d)\n", datos->thread_id, i + 1);
+                error = true;
+            }
+            {
+                cant_depositos++;
+            }
+            break;
+        case 2:
+            // Retiro
+            masivo_retiro(op.cuenta1, op.monto);
+
+            if (result == -1)
+            {
+                sprintf(thread_error, "Error en hilo %d: El número de cuenta no existe.(línea %d)\n", datos->thread_id, i + 1);
+                error = true;
+            }
+            else if (result == -2)
+            {
+                sprintf(thread_error, "Error en hilo %d: El monto debe ser un número positivo.(línea %d)\n", datos->thread_id, i + 1);
+                error = true;
+            }
+            else if (result == -3)
+            {
+                sprintf(thread_error, "Error en hilo %d:  Saldo insuficiente.(línea %d)\n", datos->thread_id, i + 1);
+                error = true;
+            }
+            {
+            cant_retiros++;
+            }
+            break;
+        case 3:
+            // Transferencia
+            masivo_transaccion(op.cuenta1, op.cuenta2, op.monto);
+            if (result == -1)
+            {
+                sprintf(thread_error, "Error en hilo %d: El número de cuenta origen no existe.(línea %d)\n", datos->thread_id, i + 1);
+                error = true;
+            }
+            else if (result == -2)
+            {
+                sprintf(thread_error, "Error en hilo %d: El número de cuenta destino no existe.línea %d)\n", datos->thread_id, i + 1);
+                error = true;
+            }
+            else if (result == -3)
+            {
+                sprintf(thread_error, "Error en hilo %d: El monto debe ser un número positivo.(línea %d)\n", datos->thread_id, i + 1);
+                error = true;
+            }
+            else if (result == -4)
+            {
+                sprintf(thread_error, "Error en hilo %d:  Saldo insuficiente.(línea %d)\n", datos->thread_id, i + 1);
+                error = true;
+            }
+            {
+            cant_transferencias++;
+            }
+
+            break;
+        default:
+            break;
+        }
+
+        if (error) {
+            pthread_mutex_lock(datos->error_mutex);
+            strcat(datos->errores, thread_error);
+            pthread_mutex_unlock(datos->error_mutex);
+            continue;
+        }
+    }
+
+    pthread_mutex_lock(&lock);
+    *(datos->cant_depositos) += cant_depositos;
+    *(datos->cant_retiros) += cant_retiros;
+    *(datos->cant_transferencias) += cant_transferencias;
+    pthread_mutex_unlock(&lock);
+
+    pthread_exit(NULL);
+}
+
+void carga_masiva_operaciones()
+{
     printf("Carga masiva de operaciones\n");
+
+    const char *filename = "operaciones.json";
+    char *json_string = read_file(filename);
+
+    if (json_string)
+    {
+        cJSON *json = parse_json(json_string);
+        if (json)
+        {
+            int total_operaciones = cJSON_GetArraySize(json);
+            Operacion *operaciones_temporales = (Operacion *)malloc(total_operaciones * sizeof(Operacion));
+
+            // Extraer las operaciones del JSON
+            for (int i = 0; i < total_operaciones; i++)
+            {
+                cJSON *item = cJSON_GetArrayItem(json, i);
+                operaciones_temporales[i].operacion = cJSON_GetObjectItem(item, "operacion")->valueint;
+                operaciones_temporales[i].cuenta1 = cJSON_GetObjectItem(item, "cuenta1")->valueint;
+                operaciones_temporales[i].cuenta2 = cJSON_GetObjectItem(item, "cuenta2")->valueint;
+                operaciones_temporales[i].monto = cJSON_GetObjectItem(item, "monto")->valuedouble;
+            }
+
+            sem_init(&semaforo, 0, 1);
+
+            int num_hilos = 4;
+            pthread_t hilos[num_hilos];
+            OperacionThreadData datos_hilo[num_hilos];
+
+            int cant_depositos[4] = {0,0,0,0};
+            int cant_retiros[4] = {0,0,0,0};
+            int cant_transferencias[4] = {0,0,0,0};
+
+                        // Inicializar estructuras para manejo de errores
+            pthread_mutex_t error_mutex = PTHREAD_MUTEX_INITIALIZER;
+            char *errores = (char *)malloc(1000 * sizeof(char)); // Tamaño inicial arbitrario
+            errores[0] = '\0'; // Inicializar cadena vacía
+
+            int operaciones_por_hilo = total_operaciones / num_hilos;
+
+            for (int i = 0; i < num_hilos; i++)
+            {
+                datos_hilo[i].operaciones = operaciones_temporales;
+                datos_hilo[i].start = i * operaciones_por_hilo;
+                if (i == num_hilos - 1)
+                {
+                    datos_hilo[i].end = total_operaciones;
+                }
+                else
+                {
+                    datos_hilo[i].end = (i + 1) * operaciones_por_hilo;
+                }
+                datos_hilo[i].cant_depositos = &cant_depositos[i];
+                datos_hilo[i].cant_retiros = &cant_retiros[i];
+                datos_hilo[i].thread_id = i + 1;
+                datos_hilo[i].cant_transferencias = &cant_transferencias[i];
+                datos_hilo[i].errores = errores;
+                datos_hilo[i].error_mutex = &error_mutex;
+
+                pthread_create(&hilos[i], NULL, ejecutar_operaciones, &datos_hilo[i]);
+            }
+
+            // Esperar a que los hilos terminen
+            for (int i = 0; i < num_hilos; ++i)
+            {
+                pthread_join(hilos[i], NULL);
+            }
+
+            // Generacion de reporte
+            time_t now = time(NULL);
+            struct tm *t = localtime(&now);
+            char report_filename[100];
+            char time_buffer[20];
+
+            int operaciones_hilo_1 = cant_depositos[0] + cant_retiros[0] + cant_transferencias[0];
+            int operaciones_hilo_2 = cant_depositos[1] + cant_retiros[1] + cant_transferencias[1];
+            int operaciones_hilo_3 = cant_depositos[2] + cant_retiros[2] + cant_transferencias[2];
+            int operaciones_hilo_4 = cant_depositos[3] + cant_retiros[3] + cant_transferencias[3];
+
+            int total_depositos = cant_depositos[0] + cant_depositos[1] + cant_depositos[2]+ cant_depositos[3];
+            int total_retiros = cant_retiros[0] + cant_retiros[1] + cant_retiros[2] + cant_retiros[3];
+            int total_transferencias = cant_transferencias[0] + cant_transferencias[1] + cant_transferencias[2]+ cant_transferencias[3];
+
+
+            strftime(report_filename, sizeof(report_filename) - 1, "operaciones_%Y_%m_%d-%H_%M_%S.log", t);
+
+            FILE *report_file = fopen(report_filename, "w");
+            if (!report_file) {
+                perror("Could not open report file");
+                return;
+            }
+
+            fprintf(report_file, "---------- Resumen de operaciones ----------\n\n");
+
+            strftime(time_buffer, sizeof(time_buffer), "%Y-%m-%d %H:%M:%S", t);
+            fprintf(report_file, "Fecha: %s\n\n", time_buffer);
+
+            fprintf(report_file, "Operaciones realizadas:\n");
+            fprintf(report_file, "Retiros: %d\n", total_retiros);
+            fprintf(report_file, "Depositos: %d\n", total_depositos);
+            fprintf(report_file, "Transferencias: %d\n", total_transferencias);
+            fprintf(report_file, "Total: %d\n\n", total_depositos+ total_retiros + total_transferencias);
+
+            fprintf(report_file, "Operaciones por hilo:\n");
+            fprintf(report_file, "Hilo #1: %d\n", operaciones_hilo_1);
+            fprintf(report_file, "Hilo #2: %d\n", operaciones_hilo_2);
+            fprintf(report_file, "Hilo #3: %d\n", operaciones_hilo_3);
+            fprintf(report_file, "Hilo #4: %d\n", operaciones_hilo_4);
+            fprintf(report_file, "Total: %d\n\n", operaciones_hilo_1 + operaciones_hilo_2 + operaciones_hilo_3 + operaciones_hilo_4);
+
+            fprintf(report_file, "Errores encontrados:\n%s\n", errores);
+
+            fclose(report_file);
+
+            free(operaciones_temporales);
+            free(errores);
+            sem_destroy(&semaforo);
+            cJSON_Delete(json);
+        }
+    }
 }
 
 void estado_cuenta() {
