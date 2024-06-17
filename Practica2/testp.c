@@ -483,6 +483,8 @@ void *ejecutar_operaciones(void *arg)
 
             break;
         default:
+            sprintf(thread_error, "Error en hilo %d:  La operacion indicada no existe. (línea %d)\n", datos->thread_id, i + 1);
+            error = true;
             break;
         }
 
