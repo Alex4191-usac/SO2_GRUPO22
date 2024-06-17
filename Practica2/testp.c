@@ -662,7 +662,25 @@ void estado_cuenta() {
 }
 
 int main() {
-    const char *filename = "usuarios.json";
+
+    char buffer[250];
+    //const char *filename = "usuarios.json";
+    char *filename;
+
+
+    printf("Ingrese la ruta del archivo de usuarios: ");
+    if (fgets(buffer, sizeof(buffer), stdin) != NULL) {
+        // Elimina el carácter de nueva línea al final de la cadena, si existe
+        size_t len = strlen(buffer);
+        if (len > 0 && buffer[len-1] == '\n') {
+            buffer[len-1] = '\0';
+        }
+        filename = buffer;
+    } else {
+        printf("Error al leer la entrada.\n");
+        return 0;
+    }
+
     char *json_string = read_file(filename);
 
     if (json_string) {
@@ -687,6 +705,8 @@ int main() {
             time_t now = time(NULL);
             struct tm *t = localtime(&now);
             char report_filename[100];
+            char time_buffer[20];
+
             strftime(report_filename, sizeof(report_filename) - 1, "carga_%Y_%m_%d-%H_%M_%S.log", t);
 
             FILE *report_file = fopen(report_filename, "w");
@@ -726,7 +746,11 @@ int main() {
 
             // Generar el reporte
             int total_users_loaded = num_users_loaded[0] + num_users_loaded[1] + num_users_loaded[2];
-            fprintf(report_file, "Reporte de carga:\n");
+            fprintf(report_file, "Reporte de carga:\n\n");
+
+            strftime(time_buffer, sizeof(time_buffer), "%Y-%m-%d %H:%M:%S", t);
+            fprintf(report_file, "Fecha: %s\n\n", time_buffer);
+
             fprintf(report_file, "Hilo 0: %d usuarios cargados\n", num_users_loaded[0]);
             fprintf(report_file, "Hilo 1: %d usuarios cargados\n", num_users_loaded[1]);
             fprintf(report_file, "Hilo 2: %d usuarios cargados\n", num_users_loaded[2]);
