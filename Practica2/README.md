@@ -55,3 +55,178 @@ y ejecutarlo en la ruta relativa:
 ./testp
 ```
 
+### Resumen de Funciones y Estructuras
+#### Estructuras
+
+ * Usuario
+Estructura para almacenar la información de un usuario.
+```c
+typedef struct {
+    int no_cuenta;
+    char nombre[100];
+    double saldo;
+} Usuario;
+```
+
+* Operacion
+Estructura para almacenar la información de las operaciones.
+```c
+typedef struct {
+    int operacion;
+    int cuenta1;
+    int cuenta2;
+    double monto;
+} Operacion;
+
+```
+
+* OperacionThreadData
+Estructura para pasar datos a los hilos que ejecutarán operaciones.
+
+```c
+typedef struct {
+    Operacion* operaciones;
+    int start;
+    int end;
+    int thread_id;
+    int *cant_retiros;
+    int *cant_depositos;
+    int *cant_transferencias;
+    char *errores;
+    FILE *report_file;
+    pthread_mutex_t *error_mutex; // Mutex para controlar acceso a errores
+} OperacionThreadData;
+
+```
+
+* ThreadData
+Estructura para pasar datos a los hilos que cargarán usuarios.
+
+```c
+typedef struct {
+    Usuario *usuarios;
+    int start;
+    int end;
+    int thread_id;
+    int *num_users_loaded;
+    FILE *report_file; // Para escribir directamente en el reporte
+    bool *cuentas_existentes; // Array para verificar cuentas existentes
+    char *errores; // Cadena de caracteres para almacenar errores
+    pthread_mutex_t *error_mutex; // Mutex para controlar acceso a errores
+} ThreadData;
+
+```
+
+#### Funciones
+
+* read_file
+Función para leer el contenido de un archivo.
+
+```c
+char *read_file(const char *filename);
+```
+
+* parse_json
+Función para parsear el JSON y extraer los usuarios.
+
+```c
+cJSON *parse_json(const char *json_string);
+```
+
+* agregar_usuario
+Función para agregar un usuario a la estructura compartida.
+
+```c
+void agregar_usuario(Usuario usuario);
+```
+
+* cargar_usuarios
+Función que ejecutarán los hilos para cargar usuarios.
+
+```c
+void *cargar_usuarios(void *arg);
+```
+
+* buscar_usuario
+Función para buscar un usuario por número de cuenta.
+
+```c
+Usuario* buscar_usuario(int no_cuenta);
+```
+
+* deposito
+Función para realizar un depósito.
+
+```c
+void deposito();
+```
+
+* retiro
+Función para realizar un retiro.
+
+```c
+void retiro();
+```
+
+* consultar_cuenta
+Función para consultar una cuenta.
+
+```c
+void consultar_cuenta();
+```
+* transaccion
+Función para realizar una transacción.
+
+```c
+void transaccion();
+
+```
+
+* operaciones_individuales
+Función para manejar el menú de operaciones individuales.
+
+```c
+void operaciones_individuales();
+```
+
+* masivo_deposito
+Función para realizar un depósito masivo.
+
+```c
+int masivo_deposito(int no_cuenta, double monto);
+```
+
+* ejecutar_operaciones
+Función que ejecutarán los hilos para ejecutar operaciones masivas.
+
+```c
+void *ejecutar_operaciones(void *arg);
+```
+
+* carga_masiva_operaciones
+Función para manejar la carga masiva de operaciones desde un archivo JSON.
+
+```c
+void carga_masiva_operaciones();
+```
+
+* estado_cuenta
+Función para guardar el estado de las cuentas en un archivo JSON.
+
+```c
+void estado_cuenta();
+```
+
+#### Mutex y Semáforos
+
+pthread_mutex_t lock : Mutex para sincronización general.
+pthread_mutex_t usuarios_mutex : Mutex para controlar acceso a la estructura de usuarios.
+sem_t semaforo : Semáforo para sincronización en operaciones masivas.
+
+```c
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t usuarios_mutex = PTHREAD_MUTEX_INITIALIZER;
+sem_t semaforo;
+
+```
+
