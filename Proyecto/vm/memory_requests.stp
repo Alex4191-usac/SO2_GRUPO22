@@ -1,0 +1,21 @@
+#! /usr/bin/env stap
+
+global last_call = ""
+
+# Handler para la llamada al sistema mmap2
+probe syscall.mmap2 {
+    current_call = sprintf("mmap,%d,%s,%s,%d\n", pid(), execname(), tz_ctime(gettimeofday_s()), length/(1024 * 1024))
+    if (current_call != last_call && length/ (1024 * 1024)>0) {
+        printf("%s", current_call)
+        last_call = current_call
+    }
+}
+
+# Handler para la llamada al sistema munmap
+probe syscall.munmap {
+    current_call = sprintf("munmap,%d,%s,%s,%d\n", pid(), execname(), tz_ctime(gettimeofday_s()), length/(1024 * 1024))
+    if (current_call != last_call && length/ (1024 * 1024)>0) {
+        printf("%s", current_call)
+        last_call = current_call
+    }
+}
