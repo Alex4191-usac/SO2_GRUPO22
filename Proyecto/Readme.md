@@ -16,6 +16,7 @@ El proyecto "Manejo de Memoria" se enfoca en desarrollar una aplicación capaz d
 Este manual técnico tiene como objetivo proporcionar una guía completa para entender, configurar y utilizar la aplicación desarrollada. Se describen los componentes principales de la aplicación, las funcionalidades que ofrece y las instrucciones paso a paso para su instalación y uso.
 
 
+
 ### Arquitectura
 ![alt text](assets/image.png)
 
@@ -40,6 +41,27 @@ Se declara una variable global last_call para almacenar la última llamada regis
 
 * probe syscall.mmap2: Maneja las llamadas al sistema mmap2, formatea la información relevante y la imprime si es diferente de la última llamada registrada.
 * probe syscall.munmap: Maneja las llamadas al sistema munmap, similar a mmap2.
+
+```bash
+# Handler para la llamada al sistema mmap2
+probe syscall.mmap2 {
+    current_call = sprintf("mmap,%d,%s,%s,%d\n", pid(), execname(), tz_ctime(gettimeofday_s()), length/(1024 * 1024))
+    if (current_call != last_call && length/ (1024 * 1024)>0) {
+        printf("%s", current_call)
+        last_call = current_call
+    }
+}
+
+# Handler para la llamada al sistema munmap
+probe syscall.munmap {
+    current_call = sprintf("munmap,%d,%s,%s,%d\n", pid(), execname(), tz_ctime(gettimeofday_s()), length/(1024 * 1024))
+    if (current_call != last_call && length/ (1024 * 1024)>0) {
+        printf("%s", current_call)
+        last_call = current_call
+    }
+}
+
+```
 
 
 ### main.c:
@@ -70,3 +92,74 @@ Utiliza la biblioteca MySQL para ejecutar consultas SQL e insertar la informaci�
 Crea una consulta SQL dinámica utilizando la información procesada y la ejecuta con mysql_query.
 
 
+### API
+
+la api fue desarrollada en el lenguaje de Javascript con el framework de NODE.JS con express
+esta tiene la finalidad de recolectar los datos que fueron almacenados en la base de datos
+de MYSQL y que fueron llamados-almacenados por ordenes de main.c;
+dentro esta interfaz se tienen dos rutas a las cuales hace enfasis, los cuales son:
+
+```Javascript
+router.get('/allData', kernelController.getAllData);
+router.get('/getByProceso', kernelController.getByProceso);
+```
+las funciones dentro de los controllador son las siguientes
+
+#### `getAllData`
+
+Esta función recupera todos los datos de la tabla `Data` en la base de datos.
+
+- **Ruta**: `/getAllData`
+- **Método**: `GET`
+- **Descripción**: Ejecuta una consulta para seleccionar todos los registros de la tabla `Data` y devuelve el resultado en formato JSON.
+- **Código**:
+    ```javascript
+    async function getAllData(req, res) {
+        try {
+            const query = 'SELECT * FROM Data';
+            const result = await db.query(query);
+            console.log(result[0]);
+            res.json(result[0]);
+        } catch (error) {
+            console.log(error);
+        }
+    }
+    ```
+
+### `getByProceso`
+
+Esta función recupera datos agrupados por el proceso (`pid`) y el nombre, sumando el tamaño total (`tamano`) de cada grupo.
+
+- **Ruta**: `/getByProceso`
+- **Método**: `GET`
+- **Descripción**: Ejecuta una consulta que selecciona el `pid`, el `nombre`, y la suma del tamaño (`tamano`) agrupados por `pid` y `nombre`, devolviendo el resultado en formato JSON.
+- **Código**:
+    ```javascript
+    async function getByProceso(req, res) {
+        try {
+            const query = `select pid, nombre, SUM(tamano) as total_tamanio
+                            from Data
+                            GROUP BY pid, nombre;`;
+            const result = await db.query(query);
+            console.log(result[0]);
+            res.json(result[0]);
+        } catch (error) {
+            console.log(error);
+        }
+    }
+    ```
+
+
+
+### Instrucciones para la Ejecución
+
+1. Clona el repositorio.
+2. Instala las dependencias necesarias utilizando `npm install` en la carpeta *api*.
+3. Instala las dependencias necesarias para levantar el cliente utilizando `npm install` dentro de la carpeta
+*dashboard-app*
+4. Configura la conexión a la base de datos en el archivo de configuración correspondiente (env) para la api.
+5. Inicia el servidor con `npm start`.
+6. Inicia el cliente con `npm run dev`.
+7. Asegurate de tener instalado la libreria para conexion de mysql para el archivo main.c
+8. genera el ejecutable `gcc main -o main.c`
+9. ejecutalo como `./main`
